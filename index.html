@@ -6,20 +6,21 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <title>滑动出盘 · 3v3</title>
 <style>
-  :root { --ink:#eef8ef; --grass:#1b8a3f; --end:#146330; --line:rgba(255,255,255,.88); }
-  * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; user-select:none; }
-  html, body { height:100%; background:#07140c; color:var(--ink); font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Noto Sans SC",sans-serif; overflow:hidden; }
-  canvas { display:block; width:100%; height:100%; touch-action:none; }
-  #hud { position:fixed; inset:0 0 auto 0; z-index:3; padding:calc(8px + env(safe-area-inset-top)) 14px 0; display:flex; justify-content:space-between; pointer-events:none; }
-  .stat { font-weight:800; text-shadow:0 1px 6px rgba(0,0,0,.45); }
+  html, body { height:100%; width:100%; overflow:hidden; position:fixed; inset:0; touch-action:none; background:#07140c; color:#eef8ef; font-family:-apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; }
+  * { box-sizing:border-box; margin:0; padding:0; -webkit-user-select:none; user-select:none; -webkit-touch-callout:none; -webkit-tap-highlight-color:transparent; }
+  canvas { position:fixed; inset:0; width:100%; height:100%; touch-action:none; display:block; }
+  #hud { position:fixed; top:0; left:0; right:0; z-index:3; padding:calc(8px + env(safe-area-inset-top)) 14px 0; display:flex; justify-content:space-between; pointer-events:none; }
+  .stat { font-weight:800; text-shadow:0 1px 6px #000; }
   .stat small { display:block; font-size:11px; opacity:.75; font-weight:600; }
   #stall { font-variant-numeric:tabular-nums; font-size:30px; line-height:1; }
   #stall.warn { color:#ffd60a; } #stall.hot { color:#ff453a; }
-  #hint { position:fixed; left:0; right:0; bottom:calc(12px + env(safe-area-inset-bottom)); text-align:center; z-index:3; pointer-events:none; font-size:13px; font-weight:700; text-shadow:0 1px 8px #000; }
-  #overlay { position:fixed; inset:0; z-index:6; display:flex; align-items:center; justify-content:center; background:rgba(5,14,8,.78); backdrop-filter:blur(8px); padding:22px; }
+  #hint { position:fixed; left:0; right:0; bottom:calc(64px + env(safe-area-inset-bottom)); text-align:center; z-index:3; pointer-events:none; font-size:13px; font-weight:700; text-shadow:0 1px 8px #000; }
+  #dbg { position:fixed; left:10px; top:calc(52px + env(safe-area-inset-top)); z-index:5; font-size:11px; opacity:.8; pointer-events:none; }
+  #passBtn { position:fixed; left:16px; right:16px; bottom:calc(10px + env(safe-area-inset-bottom)); z-index:5; border:0; border-radius:16px; padding:14px; font:inherit; font-weight:800; font-size:16px; background:#34c759; color:#06210d; }
+  #overlay { position:fixed; inset:0; z-index:8; display:flex; align-items:center; justify-content:center; background:rgba(5,14,8,.82); padding:22px; }
   #overlay.hide { display:none; }
   .card { width:min(440px,100%); background:#102418; border:1px solid rgba(255,255,255,.12); border-radius:22px; padding:24px 18px; text-align:center; }
-  h1 { font-size:28px; letter-spacing:.08em; }
+  h1 { font-size:28px; }
   p { margin:12px 0 18px; line-height:1.6; color:#cfe8d4; font-size:14px; }
   .go, .ghost { width:100%; border:0; border-radius:14px; padding:14px; font:inherit; font-weight:800; font-size:16px; }
   .go { background:#34c759; color:#06210d; }
@@ -32,13 +33,15 @@
   <div class="stat" style="text-align:center">STALL<div id="stall">0</div></div>
   <div class="stat" style="text-align:right">对方 <span id="scoreThem">0</span><small id="phase">持盘滑动出盘</small></div>
 </div>
-<div id="hint">任意位置向外滑即可出盘</div>
+<div id="dbg">等待开打</div>
+<div id="hint">按住屏幕向外滑，或点下方短传</div>
+<button id="passBtn" type="button">短传给最近队友</button>
 <div id="overlay">
   <div class="card">
     <h1>滑动出盘</h1>
-    <p>3 对 3 极限飞盘原型。<br>持盘后在屏幕任意位置向外滑，松手出盘。<br>持盘不能跑。Stall 到 10 掉盘。达阵区接住得 1 分。</p>
-    <button class="go" id="startBtn">开打</button>
-    <button class="ghost" id="howBtn">再看一次</button>
+    <p>iPhone 请先点开打，然后按住屏幕任意处向外滑。<br>滑不动就点底部绿色「短传」。 </p>
+    <button class="go" id="startBtn" type="button">开打</button>
+    <button class="ghost" id="howBtn" type="button">再看一次</button>
   </div>
 </div>
 <canvas id="c"></canvas>
