@@ -3,7 +3,7 @@ const ctx = canvas.getContext('2d');
 const GOAL = 5;
 const STALL_MAX = 10;
 const R = 16;
-const S = { mode: 'menu', us: 0, them: 0, offense: 'us', stall: 0, drag: null, msg: '任意位置向外滑即可出盘', flash: 0, W: 0, H: 0, field: null };
+const S = { mode: 'menu', us: 0, them: 0, offense: 'us', stall: 0, drag: null, msg: '按住屏幕向外滑', flash: 0, W: 0, H: 0, field: null };
 let players = [];
 let disc = null;
 let last = 0;
@@ -11,13 +11,14 @@ function $(id) { return document.getElementById(id); }
 function clamp(v, a, b) { return Math.max(a, Math.min(b, v)); }
 function dist(a, b) { return Math.hypot(a.x - b.x, a.y - b.y); }
 function lerp(a, b, t) { return a + (b - a) * t; }
+function dbg(t) { const el = $('dbg'); if (el) el.textContent = t; }
 function resize() {
   const dpr = Math.min(devicePixelRatio || 1, 2);
   S.W = innerWidth; S.H = innerHeight;
   canvas.width = S.W * dpr; canvas.height = S.H * dpr;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   const padX = 18, padY = 58;
-  S.field = { x: padX, y: padY, w: S.W - padX * 2, h: S.H - padY - 46 };
+  S.field = { x: padX, y: padY, w: S.W - padX * 2, h: S.H - padY - 70 };
   S.field.end = S.field.h * 0.16;
 }
 addEventListener('resize', resize);
@@ -46,56 +47,78 @@ function resetPoint(giveTo) {
   ];
   const h0 = players.find(p => p.team === giveTo && p.name === 'H') || players.find(p => p.team === giveTo);
   disc = { x: h0.x, y: h0.y, vx: 0, vy: 0, spin: 0, owner: h0, flying: false, target: null };
-  S.msg = giveTo === 'us' ? '任意位置向外滑即可出盘' : '防守：点我方球员追防';
+  S.msg = giveTo === 'us' ? '按住屏幕向外滑，或点短传' : '防守：点我方球员';
   $('phase').textContent = giveTo === 'us' ? '进攻' : '防守';
 }
 function teamOf(side) { return players.filter(p => p.team === side); }
 function others(side) { return players.filter(p => p.team !== side); }
-function holder() { return disc.owner; }
+function holder() { return disc && disc.owner; }
 function canThrow() {
   const h = holder();
-  return S.mode === 'play' && !disc.flying && h && h.team === 'us';
+  return S.mode === 'play' && disc && !disc.flying && h && h.team === 'us';
 }
-function pointer(e) {
-  const src = (e.changedTouches && e.changedTouches[0]) || (e.touches && e.touches[0]) || e;
-  return { x: src.clientX, y: src.clientY };
+function ptFrom(e) {
+  if (e.changedTouches && e.changedTouches.length) return { x: e.changedTouches[0].clientX, y: e.changedTouches[0].clientY };
+  if (e.touches && e.touches.length) return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  if (typeof e.clientX === 'number') return { x: e.clientX, y: e.clientY };
+  return null;
 }
-function onDown(e) {
-  if (S.mode !== 'play') return;
-  e.preventDefault();
-  if (e.pointerId != null && canvas.setPointerCapture) {
-    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
-  }
-  const pt = pointer(e);
+function aimStart(pt) {
+  if (!pt || S.mode !== 'play') return;
+  if (pt.y > innerHeight - 70) return;
   if (!canThrow()) {
     const mine = teamOf('us').sort((a, b) => dist(a, pt) - dist(b, pt))[0];
     if (mine) mine.cut = { x: pt.x, y: pt.y, chase: true };
+    dbg('防守点选');
     return;
   }
   S.drag = { x0: pt.x, y0: pt.y, x1: pt.x, y1: pt.y, t0: performance.now() };
+  dbg('按住了，向外滑');
 }
-function onMove(e) {
-  if (!S.drag || S.mode !== 'play') return;
-  e.preventDefault();
-  const pt = pointer(e);
+function aimMove(pt) {
+  if (!S.drag || !pt) return;
   S.drag.x1 = pt.x; S.drag.y1 = pt.y;
+  dbg('滑动 ' + Math.round(Math.hypot(pt.x - S.drag.x0, pt.y - S.drag.y0)) + 'px');
 }
-function onUp(e) {
-  if (!S.drag || S.mode !== 'play') return;
-  e.preventDefault();
-  const pt = pointer(e);
-  S.drag.x1 = pt.x; S.drag.y1 = pt.y;
+function aimEnd(pt) {
+  if (!S.drag) return;
+  if (pt) { S.drag.x1 = pt.x; S.drag.y1 = pt.y; }
   const d = S.drag; S.drag = null;
   const len = Math.hypot(d.x1 - d.x0, d.y1 - d.y0);
   const dt = Math.max(16, performance.now() - d.t0);
-  if (len < 18) { S.msg = '再滑远一点才会出盘'; return; }
+  if (len < 16) { S.msg = '再滑远一点'; dbg('太短 ' + Math.round(len)); return; }
+  dbg('出盘 ' + Math.round(len) + 'px');
   throwDisc(d.x1 - d.x0, d.y1 - d.y0, len, dt);
 }
-['pointerdown', 'touchstart'].forEach(ev => canvas.addEventListener(ev, onDown, { passive: false }));
-['pointermove', 'touchmove'].forEach(ev => canvas.addEventListener(ev, onMove, { passive: false }));
-['pointerup', 'pointercancel', 'touchend', 'touchcancel'].forEach(ev => canvas.addEventListener(ev, onUp, { passive: false }));
+function onTouch(fn) {
+  return function (e) {
+    if (S.mode !== 'play') return;
+    if (e.target && (e.target.id === 'passBtn' || e.target.id === 'startBtn' || e.target.id === 'howBtn')) return;
+    e.preventDefault();
+    fn(ptFrom(e));
+  };
+}
+window.addEventListener('touchstart', onTouch(aimStart), { passive: false });
+window.addEventListener('touchmove', onTouch(aimMove), { passive: false });
+window.addEventListener('touchend', onTouch(aimEnd), { passive: false });
+window.addEventListener('touchcancel', onTouch(aimEnd), { passive: false });
+window.addEventListener('mousedown', function (e) {
+  if (e.button !== 0 || S.mode !== 'play') return;
+  if (e.target && (e.target.id === 'passBtn' || e.target.id === 'startBtn')) return;
+  aimStart({ x: e.clientX, y: e.clientY });
+});
+window.addEventListener('mousemove', function (e) { if (e.buttons === 1) aimMove({ x: e.clientX, y: e.clientY }); });
+window.addEventListener('mouseup', function (e) { aimEnd({ x: e.clientX, y: e.clientY }); });
 function nearestTeammate(pt, team) {
   return teamOf(team).filter(p => p !== holder()).sort((a, b) => dist(a, pt) - dist(b, pt))[0];
+}
+function dumpToNearest() {
+  if (!canThrow()) { dbg('现在不能传'); return; }
+  const h = holder();
+  const t = nearestTeammate(h, 'us');
+  if (!t) return;
+  throwDisc(t.x - h.x, t.y - h.y, Math.max(90, dist(h, t)), 200);
+  dbg('短传');
 }
 function throwDisc(dx, dy, len, dt) {
   const h = holder();
@@ -104,7 +127,7 @@ function throwDisc(dx, dy, len, dt) {
   const n = Math.hypot(dx, dy) || 1;
   const aimX = h.x + dx, aimY = h.y + dy;
   const target = nearestTeammate({ x: aimX, y: aimY }, h.team);
-  const mix = target && dist(target, { x: aimX, y: aimY }) < 70 ? 0.55 : 0.18;
+  const mix = target && dist(target, { x: aimX, y: aimY }) < 80 ? 0.55 : 0.12;
   const tx = target ? target.x : aimX, ty = target ? target.y : aimY;
   const dirx = lerp(dx / n, (tx - h.x) / (Math.hypot(tx - h.x, ty - h.y) || 1), mix);
   const diry = lerp(dy / n, (ty - h.y) / (Math.hypot(tx - h.x, ty - h.y) || 1), mix);
@@ -118,7 +141,7 @@ function catchDisc(p) {
   disc.owner = p; disc.x = p.x; disc.y = p.y; disc.target = null; S.stall = 0;
   if (inEndzone(p, p.team)) { score(p.team); return; }
   S.offense = p.team;
-  S.msg = p.team === 'us' ? '接住了，再滑传' : '对方持盘，点我方球员去防';
+  S.msg = p.team === 'us' ? '接住了，再传' : '对方持盘';
   $('phase').textContent = p.team === 'us' ? '进攻' : '防守';
 }
 function turnover(reason, x, y) {
@@ -167,7 +190,7 @@ function aiCuts(dt) {
       const attackFar = off === 'us';
       const deep = Math.random() < 0.45;
       const side = i % 2 === 0 ? 0.22 : 0.78;
-      const fy = attackFar ? (deep ? 0.10 + Math.random() * 0.16 : 0.36 + Math.random() * 0.18) : (deep ? 0.74 + Math.random() * 0.16 : 0.46 + Math.random() * 0.18);
+      const fy = attackFar ? (deep ? 0.12 + Math.random() * 0.16 : 0.36 + Math.random() * 0.18) : (deep ? 0.72 + Math.random() * 0.16 : 0.46 + Math.random() * 0.18);
       p.cut = fieldPoint(side + (Math.random() - 0.5) * 0.12, fy);
       p.cooldown = 1.1 + Math.random() * 0.9;
     }
@@ -188,9 +211,9 @@ function aiCuts(dt) {
   });
 }
 function aiThrow(dt) {
-  if (S.offense !== 'them' || disc.flying || !holder() || holder().team !== 'them') return;
+  if (S.offense !== 'them' || !disc || disc.flying || !holder() || holder().team !== 'them') return;
   S._aiThink = (S._aiThink || 0) + dt;
-  if (S._aiThink < 0.55 && S.stall < 8) return;
+  if (S._aiThink < 0.7 && S.stall < 8) return;
   S._aiThink = 0;
   const h = holder();
   const opts = teamOf('them').filter(p => p !== h);
@@ -253,10 +276,6 @@ function drawPlayers() {
     }
     ctx.fillStyle = '#fff'; ctx.font = '800 11px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(p.name, p.x, p.y);
-    if (p.team === 'us' && S.offense === 'us' && p !== holder() && !disc.flying) {
-      ctx.beginPath(); ctx.strokeStyle = 'rgba(255,255,255,.35)'; ctx.lineWidth = 2;
-      ctx.arc(p.x, p.y, 22, 0, Math.PI * 2); ctx.stroke();
-    }
   }
 }
 function drawDisc() {
@@ -268,11 +287,6 @@ function drawDrag() {
   const d = S.drag, h = holder(), dx = d.x1 - d.x0, dy = d.y1 - d.y0;
   ctx.beginPath(); ctx.strokeStyle = 'rgba(255,255,255,.9)'; ctx.lineWidth = 4; ctx.setLineDash([8, 6]);
   ctx.moveTo(h.x, h.y); ctx.lineTo(h.x + dx, h.y + dy); ctx.stroke(); ctx.setLineDash([]);
-  const aimPt = { x: h.x + dx, y: h.y + dy };
-  const aim = nearestTeammate(aimPt, 'us');
-  if (aim && dist(aim, aimPt) < 90) {
-    ctx.beginPath(); ctx.strokeStyle = '#34c759'; ctx.lineWidth = 3; ctx.arc(aim.x, aim.y, 26, 0, Math.PI * 2); ctx.stroke();
-  }
 }
 function loop(t) {
   const dt = Math.min(0.033, (t - last) / 1000 || 0.016); last = t;
@@ -286,9 +300,13 @@ function startGame() {
   S.mode = 'play'; S.us = 0; S.them = 0;
   $('scoreUs').textContent = '0'; $('scoreThem').textContent = '0';
   $('overlay').classList.add('hide'); resetPoint('us');
+  dbg('已开始，向外滑或点短传');
 }
 $('startBtn').onclick = startGame;
-$('howBtn').onclick = () => {
-  $('overlay').querySelector('p').textContent = '进攻：场上任意位置向外滑，松手出盘。滑动越长飞越远。防守：点我方球员去追盘。Stall 10 秒必须出盘。';
+$('startBtn').ontouchend = function (e) { e.preventDefault(); startGame(); };
+$('passBtn').onclick = dumpToNearest;
+$('passBtn').ontouchend = function (e) { e.preventDefault(); dumpToNearest(); };
+$('howBtn').onclick = function () {
+  $('overlay').querySelector('p').textContent = '点开打后按住屏幕向外滑。不行就点绿色短传。';
 };
 resize(); requestAnimationFrame(loop);
