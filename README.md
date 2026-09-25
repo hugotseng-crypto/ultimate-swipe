@@ -1,2 +1,14 @@
-# ultimate-swipe
-3v3 ultimate frisbee prototype: swipe toward a teammate to throw
+# 滑动出盘 · 3v3
+
+单机极限飞盘原型。手机滑动、电脑拖拽，从持盘人指向要传的队友出盘。
+
+## 玩法
+
+- 3 对 3，先到 5 分
+- 持盘不能跑
+- Stall 到 10 掉盘
+- 达阵区接住得 1 分
+- 出界 / 落地 / 被断立刻换边
+- 防守时点我方球员去追防
+
+本地直接打开 `index.html`。
